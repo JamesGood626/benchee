@@ -422,7 +422,7 @@ defmodule BencheeTest do
     assert length(occurences) == 3
   end
 
-  test "inputs can also be a list of 2-tuples" do
+  test "inputs can also be a list of 2-tuples and it then keeps the order" do
     output =
       capture_io(fn ->
         map_fun = fn i -> [i, i * i] end

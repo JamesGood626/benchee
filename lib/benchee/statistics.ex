@@ -21,6 +21,9 @@ defmodule Benchee.Statistics do
     :mode,
     :minimum,
     :maximum,
+    :relative_more,
+    :relative_less,
+    :absolute_difference,
     sample_size: 0
   ]
 
@@ -37,6 +40,9 @@ defmodule Benchee.Statistics do
           mode: mode,
           minimum: number,
           maximum: number,
+          relative_more: float | nil | :infinity,
+          relative_less: float | nil | :infinity,
+          absolute_difference: float | nil,
           sample_size: integer
         }
 
@@ -140,21 +146,28 @@ defmodule Benchee.Statistics do
   def statistics(suite = %Suite{scenarios: scenarios}) do
     config = suite.configuration
 
+    scenarios_with_statistics =
+      scenarios
+      |> calculate_per_scenario_statistics(config)
+      |> sort()
+      |> calculate_relative_statistics(config.inputs)
+
+    %Suite{suite | scenarios: scenarios_with_statistics}
+  end
+
+  defp calculate_per_scenario_statistics(scenarios, config) do
     percentiles = Enum.uniq([50 | config.percentiles])
 
-    scenarios_with_statistics =
-      Parallel.map(scenarios, fn scenario ->
-        run_time_stats = scenario.run_time_data.samples |> job_statistics(percentiles) |> add_ips
-        memory_stats = job_statistics(scenario.memory_usage_data.samples, percentiles)
+    Parallel.map(scenarios, fn scenario ->
+      run_time_stats = scenario.run_time_data.samples |> job_statistics(percentiles) |> add_ips
+      memory_stats = job_statistics(scenario.memory_usage_data.samples, percentiles)
 
-        %{
-          scenario
-          | run_time_data: %{scenario.run_time_data | statistics: run_time_stats},
-            memory_usage_data: %{scenario.memory_usage_data | statistics: memory_stats}
-        }
-      end)
-
-    %Suite{suite | scenarios: sort(scenarios_with_statistics)}
+      %{
+        scenario
+        | run_time_data: %{scenario.run_time_data | statistics: run_time_stats},
+          memory_usage_data: %{scenario.memory_usage_data | statistics: memory_stats}
+      }
+    end)
   end
 
   @doc """
@@ -265,6 +278,64 @@ defmodule Benchee.Statistics do
         std_dev_ips: standard_dev_ips
     }
   end
+
+  defp calculate_relative_statistics([], _inputs), do: []
+
+  defp calculate_relative_statistics(scenarios, inputs) do
+    scenarios
+    |> scenarios_by_input(inputs)
+    |> Enum.flat_map(fn scenarios_with_same_input ->
+      {reference, others} = split_reference_scenario(scenarios_with_same_input)
+      others_with_relative = statistics_relative_to(others, reference)
+      [reference | others_with_relative]
+    end)
+  end
+
+  defp scenarios_by_input(scenarios, nil), do: [scenarios]
+
+  # we can't just group_by `input_name` because that'd lose the order of inputs which might
+  # be important
+  defp scenarios_by_input(scenarios, inputs) do
+    Enum.map(inputs, fn {input_name, _} ->
+      Enum.filter(scenarios, fn scenario -> scenario.input_name == input_name end)
+    end)
+  end
+
+  # right now we take the first scenario as we sorted them and it is the fastest,
+  # whenever we implement #179 though this becomesd more involved
+  defp split_reference_scenario(scenarios) do
+    [reference | others] = scenarios
+    {reference, others}
+  end
+
+  defp statistics_relative_to(scenarios, reference) do
+    Enum.map(scenarios, fn scenario ->
+      scenario
+      |> update_in([Access.key!(:run_time_data), Access.key!(:statistics)], fn statistics ->
+        add_relative_statistics(statistics, reference.run_time_data.statistics)
+      end)
+      |> update_in([Access.key!(:memory_usage_data), Access.key!(:statistics)], fn statistics ->
+        add_relative_statistics(statistics, reference.memory_usage_data.statistics)
+      end)
+    end)
+  end
+
+  # we might not run time/memory --> we shouldn't crash then ;)
+  defp add_relative_statistics(statistics = %{average: nil}, _reference), do: statistics
+  defp add_relative_statistics(statistics, %{average: nil}), do: statistics
+
+  defp add_relative_statistics(statistics, reference_statistics) do
+    %__MODULE__{
+      statistics
+      | relative_more: zero_safe_division(statistics.average, reference_statistics.average),
+        relative_less: zero_safe_division(reference_statistics.average, statistics.average),
+        absolute_difference: statistics.average - reference_statistics.average
+    }
+  end
+
+  defp zero_safe_division(_, 0), do: :infinity
+  defp zero_safe_division(_, 0.0), do: :infinity
+  defp zero_safe_division(a, b), do: a / b
 
   @doc """
   Calculate additional percentiles and add them to the
