@@ -58,8 +58,29 @@ defmodule Benchee.Formatters.Console.Helpers do
         label_width,
         column_width
       ) do
-    "~*s~*s - ~.2fx #{comparison_name}\n"
-    |> :io_lib.format([-label_width, name, column_width, display_value, statistics.relative_more])
+    "~*s~*s ~s"
+    |> :io_lib.format([
+      -label_width,
+      name,
+      column_width,
+      display_value,
+      comparison_display(statistics, comparison_name)
+    ])
+    |> to_string
+  end
+
+  defp comparison_display(%Statistics{relative_more: nil, absolute_difference: nil}, _), do: ""
+
+  defp comparison_display(statistics, comparison_name) do
+    "- #{comparison_text(statistics, comparison_name)}\n"
+  end
+
+  defp comparison_text(%Statistics{relative_more: :infinity}, name), do: "infinity x #{name}"
+  defp comparison_text(%Statistics{relative_more: nil}, _), do: "N/A"
+
+  defp comparison_text(statistics, comparison_name) do
+    "~.2fx ~s"
+    |> :io_lib.format([statistics.relative_more, comparison_name])
     |> to_string
   end
 end

@@ -422,7 +422,7 @@ defmodule Benchee.Formatters.Console.MemoryTest do
 
       assert output =~ "First"
       assert output =~ "Second"
-      refute output =~ "x memory usage"
+      assert output =~ "infinity x memory usage"
     end
 
     test "it doesn't blow up if some come back with a median et. al. of nil" do
