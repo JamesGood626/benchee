@@ -228,17 +228,17 @@ defmodule Benchee.Statistics do
     %__MODULE__{sample_size: 0}
   end
 
-  def job_statistics(measurements, percentiles) do
-    total = Enum.sum(measurements)
-    num_iterations = length(measurements)
+  def job_statistics(samples, percentiles) do
+    total = Enum.sum(samples)
+    num_iterations = length(samples)
     average = total / num_iterations
-    deviation = standard_deviation(measurements, average, num_iterations)
+    deviation = standard_deviation(samples, average, num_iterations)
     standard_dev_ratio = if average == 0, do: 0, else: deviation / average
-    percentiles = Percentile.percentiles(measurements, percentiles)
+    percentiles = Percentile.percentiles(samples, percentiles)
     median = Map.fetch!(percentiles, 50)
-    mode = Mode.mode(measurements)
-    minimum = Enum.min(measurements)
-    maximum = Enum.max(measurements)
+    mode = Mode.mode(samples)
+    minimum = Enum.min(samples)
+    maximum = Enum.max(samples)
 
     %__MODULE__{
       average: average,
@@ -333,6 +333,7 @@ defmodule Benchee.Statistics do
     }
   end
 
+  defp zero_safe_division(0.0, 0.0), do: 1.0
   defp zero_safe_division(_, 0), do: :infinity
   defp zero_safe_division(_, 0.0), do: :infinity
   defp zero_safe_division(a, b), do: a / b
