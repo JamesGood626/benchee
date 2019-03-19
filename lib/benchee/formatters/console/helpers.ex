@@ -49,4 +49,17 @@ defmodule Benchee.Formatters.Console.Helpers do
 
   @spec descriptor(String.t()) :: String.t()
   def descriptor(header_str), do: "\n#{header_str}: \n"
+
+  def format_comparison(
+        name,
+        statistics,
+        display_value,
+        comparison_name,
+        label_width,
+        column_width
+      ) do
+    "~*s~*s - ~.2fx #{comparison_name}\n"
+    |> :io_lib.format([-label_width, name, column_width, display_value, statistics.relative_more])
+    |> to_string
+  end
 end
